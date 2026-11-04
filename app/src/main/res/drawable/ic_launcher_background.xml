@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:angle="315"
+                android:startColor="#090E17"
+                android:endColor="#1E293B"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+    <!-- Subtle circular glow in background -->
+    <path
+        android:fillColor="#1538BDF8"
+        android:pathData="M54,18a36,36 0 1,0 0.01,0z" />
+    <path
+        android:fillColor="#10F59E0B"
+        android:pathData="M54,54a26,26 0 1,0 0.01,0z" />
+</vector>

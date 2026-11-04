@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer accent circle / ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:strokeAlpha="0.6"
+        android:pathData="M54,26 C69.46,26 82,38.54 82,54 C82,69.46 69.46,82 54,82 C38.54,82 26,69.46 26,54 C26,38.54 38.54,26 54,26 Z" />
+
+    <!-- Center Liquidity Droplet / Wave -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M54,34 C54,34 68,52 68,61 C68,68.73 61.73,75 54,75 C46.27,75 40,68.73 40,61 C40,52 54,34 54,34 Z" />
+
+    <!-- Droplet inner shine -->
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M48,56 C49,50 54,43 54,43 C54,43 45,53 46,62 C46.5,66 49,69 52,70 C48,69 46,64 48,56 Z" />
+
+    <!-- Candlestick bar left (bullish green accent) -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M34,44 L38,44 L38,62 L34,62 Z" />
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="1.5"
+        android:pathData="M36,40 L36,66" />
+
+    <!-- Candlestick bar right (liquidation alert red accent) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M70,48 L74,48 L74,66 L70,66 Z" />
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="1.5"
+        android:pathData="M72,44 L72,70" />
+</vector>

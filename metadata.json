@@ -1,0 +1,6 @@
+{
+  "name": "Likidasyon Takip",
+  "description": "Kripto ve finansal pozisyonlar için likidasyon seviyelerini, birimleri, varsayılanları ve durumları takip etme ve satış yapma uygulaması.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
