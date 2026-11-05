@@ -101,6 +101,33 @@ class LiquidationRepository(
         configDao.updateConfig(config.copy(currencySymbol = config.currencySymbol.replace("$", "").trim()))
     }
 
+    /**
+     * JSON yedeğinden kullanıcı verilerini (kayıtlar, birimler, ayarlar) veri tabanına geri yükler.
+     */
+    suspend fun restoreAllData(
+        records: List<LiquidationRecord>?,
+        units: List<UnitItem>?,
+        config: AppConfig?
+    ) {
+        if (records != null) {
+            liquidationDao.deleteAllRecords()
+            liquidationDao.insertAll(records)
+        }
+        if (units != null && units.isNotEmpty()) {
+            unitDao.deleteAllUnits()
+            val hasDefault = units.any { it.isDefault }
+            val unitsToInsert = if (!hasDefault) {
+                units.mapIndexed { index, u -> if (index == 0) u.copy(isDefault = true) else u }
+            } else {
+                units
+            }
+            unitDao.insertAll(unitsToInsert)
+        }
+        if (config != null) {
+            configDao.updateConfig(config.copy(currencySymbol = config.currencySymbol.replace("$", "").trim()))
+        }
+    }
+
     suspend fun ensureDefaultDataSeeded() {
         try {
             val unitCount = unitDao.getCount()

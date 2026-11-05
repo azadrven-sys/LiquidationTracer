@@ -108,7 +108,9 @@ fun PositionDetailsDialog(
                         }
                         val unitSuffix = if (record.unit.isNotBlank()) " ${record.unit}" else ""
                         DetailRow("Miktar", "${FormatUtils.formatAmount(record.amount)}$unitSuffix")
-                        DetailRow("Toplam Alış Maliyeti", FormatUtils.prefixCurrency(FormatUtils.formatCurrency(totalCost), currencySymbol))
+                        if (!record.isSold) {
+                            DetailRow("Toplam Alış Maliyeti", FormatUtils.prefixCurrency(FormatUtils.formatCurrency(totalCost), currencySymbol))
+                        }
                         DetailRow("Hedef Satış Yüzdesi", "+%${FormatUtils.formatPercent(record.targetPercentage)}", color = EmeraldGreen)
                         DetailRow("Hedef Satış Fiyatı", FormatUtils.prefixCurrency(FormatUtils.formatPrice(targetPrice), currencySymbol), color = EmeraldGreen)
                         DetailRow("Hedeflenen Kâr", "+${FormatUtils.prefixCurrency(FormatUtils.formatCurrency(targetProfit), currencySymbol)}", color = EmeraldGreen)

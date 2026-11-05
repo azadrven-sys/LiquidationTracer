@@ -43,4 +43,7 @@ interface LiquidationDao {
 
     @Query("UPDATE liquidation_records SET isSold = 0, salePrice = NULL, salePnl = NULL, saleDate = NULL, updatedAt = :updatedAt WHERE id = :id")
     suspend fun reopenRecord(id: Long, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM liquidation_records")
+    suspend fun deleteAllRecords()
 }

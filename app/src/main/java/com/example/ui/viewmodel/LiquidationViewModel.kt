@@ -309,6 +309,19 @@ class LiquidationViewModel(
             repository.updateConfig(config)
         }
     }
+
+    // JSON Backup / Restore
+    fun restoreAllData(
+        records: List<LiquidationRecord>?,
+        units: List<UnitItem>?,
+        config: AppConfig?,
+        onComplete: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            repository.restoreAllData(records, units, config)
+            onComplete?.invoke()
+        }
+    }
 }
 
 class LiquidationViewModelFactory(

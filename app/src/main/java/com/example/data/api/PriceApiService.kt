@@ -46,17 +46,17 @@ class PriceApiService {
     )
 
     /**
-     * Fetches current prices for common crypto & metal/asset pairs from public ticker API.
-     * Returns Map of uppercase base symbol -> price (e.g. "BTC" -> 68500.0, "ETH" -> 3500.0)
+     * Fetches current prices for all pairs from public ticker API.
+     * Maps each symbol pair (e.g. "BTCUSDT", "BTCTRY", "ETHUSDT", "PAXGUSDT")
+     * and also base keys (e.g. "BTC", "ETH") to their latest real market price.
      */
     suspend fun fetchMarketPrices(): Map<String, Double> = withContext(Dispatchers.IO) {
         val priceMap = mutableMapOf<String, Double>()
-        // Initialize with default fallback/test prices first
-        priceMap.putAll(testAndFallbackPrices)
 
         try {
             val request = Request.Builder()
                 .url("https://api.binance.com/api/v3/ticker/price")
+                .header("User-Agent", "Mozilla/5.0")
                 .get()
                 .build()
 
@@ -66,14 +66,20 @@ class PriceApiService {
                     val jsonArray = JSONArray(bodyString)
                     for (i in 0 until jsonArray.length()) {
                         val item = jsonArray.getJSONObject(i)
-                        val fullSymbol = item.getString("symbol")
+                        val fullSymbol = item.getString("symbol").uppercase()
                         val price = item.getString("price").toDoubleOrNull() ?: continue
 
-                        // Map USDT pairs to base asset: BTCUSDT -> BTC, ETHUSDT -> ETH
+                        // Store direct raw pair (e.g. "BTCTRY", "BTCUSDT")
+                        priceMap[fullSymbol] = price
+
+                        // Also store with slash if applicable
                         if (fullSymbol.endsWith("USDT")) {
                             val base = fullSymbol.removeSuffix("USDT")
                             priceMap[base] = price
                             priceMap["$base/USDT"] = price
+                        } else if (fullSymbol.endsWith("TRY")) {
+                            val base = fullSymbol.removeSuffix("TRY")
+                            priceMap["$base/TRY"] = price
                         }
                     }
                 }
@@ -81,41 +87,62 @@ class PriceApiService {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        priceMap
+
+        // If online fetch returned results, return them directly
+        if (priceMap.isNotEmpty()) {
+            return@withContext priceMap
+        }
+
+        // Only fallback if completely offline
+        testAndFallbackPrices
     }
 
     /**
-     * Attempts to fetch price for a specific single symbol.
-     * Supports Binance ticker queries, normalizes pairs (e.g. BTC, BTC/USDT, BTCUSDT),
-     * and seamlessly falls back to test/demo prices if symbol is a test data or network is unavailable.
+     * Fetches live price for a specific query symbol or user-defined API symbol.
+     * Supports pairs like "BTCTRY", "BTC/TRY", "BTCUSDT", "BTC/USDT", "SOL", "AVAX".
+     * Queries the live Binance endpoint first, and only returns fallback if network is unreachable.
      */
     suspend fun fetchSinglePrice(symbol: String): Double? = withContext(Dispatchers.IO) {
-        val rawClean = symbol.uppercase()
+        val raw = symbol.trim().uppercase()
+        if (raw.isBlank()) return@withContext null
+
+        val stripped = raw
             .replace("/", "")
             .replace("-", "")
+            .replace("_", "")
             .replace(" ", "")
             .trim()
 
-        if (rawClean.isBlank()) return@withContext null
+        // Candidates to query on Binance ticker endpoint
+        val candidates = mutableListOf<String>()
 
-        val baseSymbol = when {
-            rawClean.endsWith("USDT") && rawClean.length > 4 -> rawClean.removeSuffix("USDT")
-            rawClean.endsWith("USD") && rawClean.length > 3 -> rawClean.removeSuffix("USD")
-            rawClean.endsWith("TRY") && rawClean.length > 3 -> rawClean.removeSuffix("TRY")
-            else -> rawClean
+        // 1. If user entered exact pair with target quote (e.g. BTCTRY, ETHUSDT)
+        candidates.add(stripped)
+
+        // 2. If user entered "BTC/TRY" -> "BTCTRY", "ETH/TRY" -> "ETHTRY"
+        if (raw.contains("/TRY") || raw.contains("-TRY") || raw.endsWith("TRY")) {
+            val base = stripped.removeSuffix("TRY")
+            if (base.isNotEmpty()) {
+                candidates.add("${base}TRY")
+                candidates.add("${base}USDT")
+            }
+        } else if (raw.contains("/USDT") || raw.contains("-USDT") || raw.endsWith("USDT")) {
+            val base = stripped.removeSuffix("USDT")
+            if (base.isNotEmpty()) {
+                candidates.add("${base}USDT")
+                candidates.add("${base}TRY")
+            }
+        } else {
+            // Raw base symbol without pair, e.g. "BTC", "ETH" -> try USDT first, then TRY
+            candidates.add("${stripped}USDT")
+            candidates.add("${stripped}TRY")
         }
 
-        // Try direct online query first
-        val possibleQueries = listOf(
-            if (rawClean.endsWith("USDT")) rawClean else "${baseSymbol}USDT",
-            "${baseSymbol}TRY",
-            rawClean
-        ).distinct()
-
-        for (query in possibleQueries) {
+        for (query in candidates.distinct()) {
             try {
                 val request = Request.Builder()
                     .url("https://api.binance.com/api/v3/ticker/price?symbol=$query")
+                    .header("User-Agent", "Mozilla/5.0")
                     .get()
                     .build()
 
@@ -130,17 +157,17 @@ class PriceApiService {
                     }
                 }
             } catch (e: Exception) {
-                // Network or parsing error, will try next query or test fallback
+                // Try next candidate
             }
         }
 
-        // Test verileri & offline / demo fallback check
-        testAndFallbackPrices[baseSymbol]?.let { return@withContext it }
-        testAndFallbackPrices[rawClean]?.let { return@withContext it }
+        // Test/demo fallback only if network request did not return a valid result
+        val baseClean = stripped.removeSuffix("USDT").removeSuffix("TRY").removeSuffix("USD")
+        testAndFallbackPrices[stripped]?.let { return@withContext it }
+        testAndFallbackPrices[baseClean]?.let { return@withContext it }
 
-        // If symbol contains "TEST" or "DENEME", generate a realistic deterministic test price
-        if (baseSymbol.startsWith("TEST") || baseSymbol.startsWith("DENEME") || baseSymbol.startsWith("VARLIK")) {
-            val hash = Math.abs(baseSymbol.hashCode()) % 500 + 10.0
+        if (baseClean.startsWith("TEST") || baseClean.startsWith("DENEME") || baseClean.startsWith("VARLIK")) {
+            val hash = Math.abs(baseClean.hashCode()) % 500 + 10.0
             return@withContext hash
         }
 

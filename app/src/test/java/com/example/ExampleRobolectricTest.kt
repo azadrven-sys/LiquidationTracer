@@ -255,4 +255,132 @@ class ExampleRobolectricTest {
     assertEquals(0.0, com.example.util.MarketUtils.distanceToTargetPercent(record, 110.0)!!, 0.001)
     assertEquals(0.0, com.example.util.MarketUtils.distanceToTargetPercent(record, 115.0)!!, 0.001)
   }
+
+  @Test
+  fun `test tab counts update dynamically with search query`() {
+    val btcActive = LiquidationRecord(id = 1, assetSymbol = "BTC", buyPrice = 50000.0, amount = 1.0, targetPercentage = 10.0, isSold = false)
+    val btcSold = LiquidationRecord(id = 2, assetSymbol = "BTC", buyPrice = 40000.0, amount = 1.0, targetPercentage = 10.0, isSold = true)
+    val ethActive = LiquidationRecord(id = 3, assetSymbol = "ETH", buyPrice = 3000.0, amount = 2.0, targetPercentage = 5.0, isSold = false)
+    val list = listOf(btcActive, btcSold, ethActive)
+
+    fun filterByQuery(query: String): List<LiquidationRecord> {
+      return if (query.isBlank()) list else list.filter {
+        it.assetSymbol.contains(query, ignoreCase = true) ||
+        it.unit.contains(query, ignoreCase = true) ||
+        it.notes.contains(query, ignoreCase = true)
+      }
+    }
+
+    // Without search: Tümü: 3, Aktif: 2, Satılan: 1
+    val unsearched = filterByQuery("")
+    assertEquals(3, unsearched.size)
+    assertEquals(2, unsearched.count { !it.isSold })
+    assertEquals(1, unsearched.count { it.isSold })
+
+    // With search "BTC": Tümü: 2, Aktif: 1, Satılan: 1
+    val searchedBtc = filterByQuery("BTC")
+    assertEquals(2, searchedBtc.size)
+    assertEquals(1, searchedBtc.count { !it.isSold })
+    assertEquals(1, searchedBtc.count { it.isSold })
+
+    // With search "ETH": Tümü: 1, Aktif: 1, Satılan: 0
+    val searchedEth = filterByQuery("ETH")
+    assertEquals(1, searchedEth.size)
+    assertEquals(1, searchedEth.count { !it.isSold })
+    assertEquals(0, searchedEth.count { it.isSold })
+  }
+
+  @Test
+  fun `test json backup export and restore roundtrip`() {
+    val records = listOf(
+        LiquidationRecord(
+            id = 10,
+            assetSymbol = "SOL",
+            buyPrice = 145.0,
+            amount = 10.0,
+            targetPercentage = 5.0,
+            unit = "USDT",
+            notes = "Yedek testi",
+            isSold = false
+        ),
+        LiquidationRecord(
+            id = 11,
+            assetSymbol = "AVAX",
+            buyPrice = 28.0,
+            amount = 50.0,
+            targetPercentage = 4.0,
+            unit = "USDT",
+            notes = "Satılmış kayıt",
+            isSold = true,
+            salePrice = 30.0,
+            salePnl = 100.0,
+            saleDate = 1700000000000L
+        )
+    )
+    val units = listOf(
+        com.example.data.model.UnitItem(id = 1, name = "SOL", symbol = "SOL/USDT", currentPrice = 150.0, isDefault = true),
+        com.example.data.model.UnitItem(id = 2, name = "AVAX", symbol = "AVAX/USDT", currentPrice = 29.0, isDefault = false)
+    )
+    val config = com.example.data.model.AppConfig(defaultTargetPercentage = 2.0, defaultUnit = "SOL", defaultAmount = 5.0, currencySymbol = "USDT")
+
+    // 1. Export to JSON
+    val json = com.example.util.JsonBackupUtils.exportToJson(records, units, config)
+    org.junit.Assert.assertTrue(json.contains("\"SOL\""))
+    org.junit.Assert.assertTrue(json.contains("\"records\""))
+    org.junit.Assert.assertTrue(json.contains("\"units\""))
+    org.junit.Assert.assertTrue(json.contains("\"config\""))
+    // Verify "id" and "symbol" are NOT present in JSON
+    org.junit.Assert.assertFalse("JSON should not contain id field", json.contains("\"id\""))
+    org.junit.Assert.assertFalse("JSON should not contain symbol field", json.contains("\"symbol\""))
+
+    // 2. Parse back
+    val result = com.example.util.JsonBackupUtils.parseBackupJson(json)
+    org.junit.Assert.assertTrue(result.isSuccess)
+    val data = result.getOrNull()!!
+
+    org.junit.Assert.assertNotNull(data.records)
+    assertEquals(2, data.records!!.size)
+    assertEquals("SOL", data.records!![0].assetSymbol)
+    assertEquals(145.0, data.records!![0].buyPrice, 0.001)
+    assertEquals(false, data.records!![0].isSold)
+    assertEquals(true, data.records!![1].isSold)
+    assertEquals(100.0, data.records!![1].salePnl!!, 0.001)
+
+    org.junit.Assert.assertNotNull(data.units)
+    assertEquals(2, data.units!!.size)
+    assertEquals("SOL", data.units!![0].name)
+
+    org.junit.Assert.assertNotNull(data.config)
+    assertEquals("SOL", data.config!!.defaultUnit)
+    assertEquals(2.0, data.config!!.defaultTargetPercentage, 0.001)
+  }
+
+  @Test
+  fun `test parse raw records array json`() {
+    val rawJsonArray = """
+      [
+        {
+          "assetSymbol": "DOT",
+          "buyPrice": 7.5,
+          "amount": 100.0,
+          "targetPercentage": 10.0,
+          "unit": "USDT"
+        }
+      ]
+    """.trimIndent()
+
+    val result = com.example.util.JsonBackupUtils.parseBackupJson(rawJsonArray)
+    org.junit.Assert.assertTrue(result.isSuccess)
+    val data = result.getOrNull()!!
+    assertEquals(1, data.records?.size)
+    assertEquals("DOT", data.records!![0].assetSymbol)
+    assertEquals(7.5, data.records!![0].buyPrice, 0.001)
+  }
+
+  @Test
+  fun `test invalid json returns error`() {
+    val invalid = "{ not a valid json: 123"
+    val result = com.example.util.JsonBackupUtils.parseBackupJson(invalid)
+    org.junit.Assert.assertTrue(result.isFailure)
+  }
 }

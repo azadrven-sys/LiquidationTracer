@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,8 +92,6 @@ fun HomeScreen(
     val config by viewModel.appConfig.collectAsState()
     val filterTab by viewModel.filterTab.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
-    val isUpdatingPrices by viewModel.isUpdatingPrices.collectAsState()
-    val priceUpdateMessage by viewModel.priceUpdateMessage.collectAsState()
 
     val showCreateSheet by viewModel.showCreateSheet.collectAsState()
     val recordToEdit by viewModel.recordToEdit.collectAsState()
@@ -102,10 +101,30 @@ fun HomeScreen(
 
     var isSearchExpanded by remember { mutableStateOf(false) }
 
-    val activeRecordsCount = rawRecords.count { !it.isSold }
-    val soldRecordsCount = rawRecords.count { it.isSold }
-    val eligibleRecordsCount = remember(rawRecords, units) {
-        rawRecords.count { !it.isSold && MarketUtils.isEligibleForSale(it, MarketUtils.findMatchingUnit(it, units)?.currentPrice) }
+    // Intercept system back button when in search mode to close search instead of closing the app
+    BackHandler(enabled = isSearchExpanded || searchQuery.isNotEmpty()) {
+        isSearchExpanded = false
+        viewModel.setSearchQuery("")
+    }
+
+    // Records matching current search query (for dynamic tab counts during search)
+    val searchedRecords = remember(rawRecords, searchQuery) {
+        if (searchQuery.isBlank()) {
+            rawRecords
+        } else {
+            rawRecords.filter { item ->
+                item.assetSymbol.contains(searchQuery, ignoreCase = true) ||
+                item.unit.contains(searchQuery, ignoreCase = true) ||
+                item.notes.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    val allRecordsCount = searchedRecords.size
+    val activeRecordsCount = searchedRecords.count { !it.isSold }
+    val soldRecordsCount = searchedRecords.count { it.isSold }
+    val eligibleRecordsCount = remember(searchedRecords, units) {
+        searchedRecords.count { !it.isSold && MarketUtils.isEligibleForSale(it, MarketUtils.findMatchingUnit(it, units)?.currentPrice) }
     }
 
     Scaffold(
@@ -151,7 +170,7 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    // 1. Search toggle
+                    // Search toggle
                     IconButton(
                         onClick = {
                             isSearchExpanded = !isSearchExpanded
@@ -163,27 +182,6 @@ fun HomeScreen(
                             imageVector = if (isSearchExpanded) Icons.Default.Clear else Icons.Default.Search,
                             contentDescription = "Ara"
                         )
-                    }
-
-                    // 2. Otomatik Güncelleme Düğmesi (Arama düğmesinin hemen yanında)
-                    IconButton(
-                        onClick = { viewModel.refreshPrices() },
-                        enabled = !isUpdatingPrices,
-                        modifier = Modifier.testTag("auto_update_prices_button")
-                    ) {
-                        if (isUpdatingPrices) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = "Otomatik Fiyat Güncelle (API)",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -208,50 +206,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Price Update Notification Banner if available
-            priceUpdateMessage?.let { msg ->
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Sync,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = msg,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                        IconButton(
-                            onClick = { viewModel.clearPriceUpdateMessage() },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Kapat",
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                }
-            }
 
             // Search Bar if expanded
             AnimatedVisibility(visible = isSearchExpanded) {
@@ -371,7 +325,7 @@ fun HomeScreen(
                 FilterChip(
                     selected = filterTab == RecordFilterTab.ALL,
                     onClick = { viewModel.setFilterTab(RecordFilterTab.ALL) },
-                    label = { Text("Tümü (${rawRecords.size})") },
+                    label = { Text("Tümü ($allRecordsCount)") },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -579,8 +533,7 @@ fun HomeScreen(
                 onAddUnit = { name, symbol, price -> viewModel.addUnit(name, symbol, price) },
                 onDeleteUnit = { unit -> viewModel.deleteUnit(unit) },
                 onSetDefaultUnit = { id -> viewModel.setDefaultUnit(id) },
-                onUpdatePrice = { id, price -> viewModel.updateUnitManualPrice(id, price) },
-                onRefreshApi = { viewModel.refreshPrices() }
+                onUpdatePrice = { id, price -> viewModel.updateUnitManualPrice(id, price) }
             )
         }
         ContextMenuOption.STATUS -> {
@@ -603,11 +556,14 @@ fun HomeScreen(
         }
         ContextMenuOption.CONFIG -> {
             ConfigurationDialog(
+                records = rawRecords,
+                units = units,
                 config = config,
                 onDismiss = { viewModel.closeContextMenu() },
-                onSaveConfig = { updatedConfig ->
-                    viewModel.updateConfig(updatedConfig)
-                    viewModel.closeContextMenu()
+                onRestoreData = { recs, uns, cfg ->
+                    viewModel.restoreAllData(recs, uns, cfg) {
+                        viewModel.closeContextMenu()
+                    }
                 }
             )
         }

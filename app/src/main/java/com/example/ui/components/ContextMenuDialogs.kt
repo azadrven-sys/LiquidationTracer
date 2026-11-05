@@ -19,8 +19,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import com.example.util.JsonBackupUtils
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PieChart
@@ -81,23 +90,15 @@ fun UnitsDialog(
     onAddUnit: (name: String, symbol: String, price: Double) -> Unit,
     onDeleteUnit: (unit: UnitItem) -> Unit,
     onSetDefaultUnit: (id: Long) -> Unit,
-    onUpdatePrice: (id: Long, price: Double) -> Unit,
-    onRefreshApi: (() -> Unit)? = null
+    onUpdatePrice: (id: Long, price: Double) -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val priceApiService = remember { PriceApiService() }
-
     var newUnitName by remember { mutableStateOf("") }
     var newUnitSymbol by remember { mutableStateOf("") }
     var newUnitPriceText by remember { mutableStateOf("") }
-    var newUnitIsLoadingApi by remember { mutableStateOf(false) }
-    var newUnitApiMessage by remember { mutableStateOf<String?>(null) }
     var isAddingUnit by remember { mutableStateOf(false) }
 
     var editingUnit by remember { mutableStateOf<UnitItem?>(null) }
     var editPriceText by remember { mutableStateOf("") }
-    var editUnitIsLoadingApi by remember { mutableStateOf(false) }
-    var editUnitApiMessage by remember { mutableStateOf<String?>(null) }
 
     fun formatPrice(value: Double): String = FormatUtils.formatPrice(value)
 
@@ -265,83 +266,25 @@ fun UnitsDialog(
         }
     )
 
-    // Add New Unit Modal Dialog (styled consistently with editing dialog + API Options)
+    // Add New Unit Modal Dialog (Manual price input)
     if (isAddingUnit) {
         AlertDialog(
-            onDismissRequest = {
-                isAddingUnit = false
-                newUnitApiMessage = null
-            },
+            onDismissRequest = { isAddingUnit = false },
             title = { Text("Yeni Varlık / Birim Ekle", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Yeni varlığın sembolünü ve fiyatını belirleyin. Dilerseniz API'den anlık fiyatı çekebilirsiniz:",
+                        "Yeni varlığın sembolünü ve güncel fiyatını belirleyin:",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = newUnitName,
-                        onValueChange = {
-                            newUnitName = it
-                            newUnitApiMessage = null
-                        },
+                        onValueChange = { newUnitName = it },
                         label = { Text("Varlık / Sembol (Örn: DOT, AVAX, SOL)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    // API'den Fiyat Çek Butonu
-                    OutlinedButton(
-                        onClick = {
-                            if (newUnitName.isNotBlank()) {
-                                newUnitIsLoadingApi = true
-                                newUnitApiMessage = null
-                                coroutineScope.launch {
-                                    val fetchedPrice = priceApiService.fetchSinglePrice(newUnitName)
-                                    newUnitIsLoadingApi = false
-                                    if (fetchedPrice != null && fetchedPrice > 0.0) {
-                                        newUnitPriceText = FormatUtils.formatPlain(fetchedPrice)
-                                        newUnitApiMessage = "API'den fiyat çekildi: ${FormatUtils.prefixCurrency(formatPrice(fetchedPrice), currencySymbol)}"
-                                    } else {
-                                        newUnitApiMessage = "API'de '${newUnitName.trim().uppercase()}' bulunamadı, manuel girebilirsiniz."
-                                    }
-                                }
-                            } else {
-                                newUnitApiMessage = "Lütfen önce sembol adı girin."
-                            }
-                        },
-                        enabled = !newUnitIsLoadingApi,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (newUnitIsLoadingApi) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("API'den Aranıyor...", fontSize = 12.sp)
-                        } else {
-                            Icon(
-                                Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("API'den Fiyatı Getir", fontSize = 12.sp)
-                        }
-                    }
-
-                    newUnitApiMessage?.let { msg ->
-                        Text(
-                            text = msg,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (msg.contains("çekildi")) EmeraldGreen else MaterialTheme.colorScheme.error
-                        )
-                    }
 
                     val curSuffix = FormatUtils.sanitizeCurrency(currencySymbol).let { if (it.isNotBlank()) " ($it)" else "" }
                     OutlinedTextField(
@@ -358,12 +301,15 @@ fun UnitsDialog(
                     onClick = {
                         if (newUnitName.isNotBlank()) {
                             val price = newUnitPriceText.replace(',', '.').toDoubleOrNull() ?: 0.0
-                            val symbol = "${newUnitName.trim().uppercase()}/USDT"
+                            val symbol = if (newUnitName.contains("/")) {
+                                newUnitName.trim().uppercase()
+                            } else {
+                                "${newUnitName.trim().uppercase()}/USDT"
+                            }
                             onAddUnit(newUnitName.trim().uppercase(), symbol, price)
                             newUnitName = ""
                             newUnitSymbol = ""
                             newUnitPriceText = ""
-                            newUnitApiMessage = null
                             isAddingUnit = false
                         }
                     }
@@ -372,79 +318,25 @@ fun UnitsDialog(
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = {
-                    isAddingUnit = false
-                    newUnitApiMessage = null
-                }) {
+                OutlinedButton(onClick = { isAddingUnit = false }) {
                     Text("İptal")
                 }
             }
         )
     }
 
-    // Manual / API Price Edit Mini Dialog
+    // Manual Price Edit Mini Dialog
     editingUnit?.let { unitItem ->
         AlertDialog(
-            onDismissRequest = {
-                editingUnit = null
-                editUnitApiMessage = null
-            },
+            onDismissRequest = { editingUnit = null },
             title = { Text("${unitItem.name} Fiyatını Düzenle", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Güncel piyasa fiyatını manuel belirleyebilir veya API'den çekebilirsiniz:",
+                        "Güncel piyasa fiyatını belirleyin:",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
-                    // API'den Güncelle Butonu
-                    OutlinedButton(
-                        onClick = {
-                            editUnitIsLoadingApi = true
-                            editUnitApiMessage = null
-                            coroutineScope.launch {
-                                val fetchedPrice = priceApiService.fetchSinglePrice(unitItem.name)
-                                editUnitIsLoadingApi = false
-                                if (fetchedPrice != null && fetchedPrice > 0.0) {
-                                    editPriceText = FormatUtils.formatPlain(fetchedPrice)
-                                    editUnitApiMessage = "API'den güncel fiyat alındı: ${FormatUtils.prefixCurrency(formatPrice(fetchedPrice), currencySymbol)}"
-                                } else {
-                                    editUnitApiMessage = "API'de '${unitItem.name}' bulunamadı."
-                                }
-                            }
-                        },
-                        enabled = !editUnitIsLoadingApi,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        if (editUnitIsLoadingApi) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("API'den Fiyat Alınıyor...", fontSize = 12.sp)
-                        } else {
-                            Icon(
-                                Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("API'den Güncel Fiyatı Çek", fontSize = 12.sp)
-                        }
-                    }
-
-                    editUnitApiMessage?.let { msg ->
-                        Text(
-                            text = msg,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (msg.contains("alındı")) EmeraldGreen else MaterialTheme.colorScheme.error
-                        )
-                    }
 
                     val curSuffix = FormatUtils.sanitizeCurrency(currencySymbol).let { if (it.isNotBlank()) " ($it)" else "" }
                     OutlinedTextField(
@@ -464,17 +356,13 @@ fun UnitsDialog(
                             onUpdatePrice(unitItem.id, p)
                         }
                         editingUnit = null
-                        editUnitApiMessage = null
                     }
                 ) {
                     Text("Kaydet")
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = {
-                    editingUnit = null
-                    editUnitApiMessage = null
-                }) {
+                OutlinedButton(onClick = { editingUnit = null }) {
                     Text("İptal")
                 }
             }
@@ -761,29 +649,35 @@ fun DefaultsDialog(
 
 /**
  * 4. "Yapılandırma" Dialog:
- * App settings, currency symbol.
+ * Kullanıcı verilerini JSON formatında görüntüleme, düzenleme, panoya kopyalama ve geri yükleme (yedekleme).
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConfigurationDialog(
+    records: List<LiquidationRecord>,
+    units: List<UnitItem>,
     config: AppConfig,
     onDismiss: () -> Unit,
-    onSaveConfig: (AppConfig) -> Unit
+    onRestoreData: (records: List<LiquidationRecord>?, units: List<UnitItem>?, config: AppConfig?) -> Unit
 ) {
-    var currencySymbol by remember { mutableStateOf(FormatUtils.sanitizeCurrency(config.currencySymbol)) }
+    val clipboardManager = LocalClipboardManager.current
+    var jsonText by remember {
+        mutableStateOf(JsonBackupUtils.exportToJson(records, units, config))
+    }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
-                imageVector = Icons.Default.Settings,
+                imageVector = Icons.Default.DataObject,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
             )
         },
         title = {
             Text(
-                text = "Yapılandırma",
+                text = "Yapılandırma (JSON)",
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.testTag("dialog_title_config")
             )
@@ -793,84 +687,169 @@ fun ConfigurationDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Para birimi ve genel uygulama görünüm yapılandırması:",
+                    text = "Tüm kullanıcı verileri (kayıtlar, birimler ve ayarlar) JSON olarak listelenmiştir. Buradan düzenleyebilir, kopyalayabilir veya yeni veri yapıştırıp geri yükleyebilirsiniz:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Currency Symbol Selection
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Para Birimi Sembolü",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Info row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        val options = listOf(
-                            "" to "Yok",
-                            "USDT" to "USDT",
-                            "TL" to "TL",
-                            "₺" to "₺",
-                            "€" to "€"
+                        Text(
+                            text = "${records.size} Kayıt • ${units.size} Birim",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        options.forEach { (symbol, label) ->
-                            FilterChip(
-                                selected = currencySymbol == symbol,
-                                onClick = { currencySymbol = symbol },
-                                label = {
-                                    Text(
-                                        text = label,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            )
-                        }
                     }
 
-                    OutlinedTextField(
-                        value = currencySymbol,
-                        onValueChange = { input ->
-                            currencySymbol = FormatUtils.sanitizeCurrency(input)
-                        },
-                        label = { Text("Özel Sembol (İsteğe Bağlı)") },
-                        placeholder = { Text("Örn: USDT, TL, €") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        supportingText = {
-                            Text(
-                                if (currencySymbol.isBlank()) "Şu anki seçim: Sembolsüz (Sadece tutar)" else "Şu anki seçim: $currencySymbol"
-                            )
-                        }
+                    Text(
+                        text = "Format: JSON",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                // Action Bar: Kopyala, Yapıştır, Sıfırla
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(jsonText))
+                            statusMessage = "JSON panoya kopyalandı!"
+                            errorMessage = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Kopyala", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val clip = clipboardManager.getText()?.text
+                            if (!clip.isNullOrBlank()) {
+                                jsonText = clip
+                                statusMessage = "Panodaki JSON yapıştırıldı."
+                                errorMessage = null
+                            } else {
+                                errorMessage = "Panoda metin bulunamadı."
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Yapıştır", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            jsonText = JsonBackupUtils.exportToJson(records, units, config)
+                            statusMessage = "Güncel veriler yeniden yüklendi."
+                            errorMessage = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Sıfırla", fontSize = 11.sp)
+                    }
+                }
+
+                if (statusMessage != null) {
+                    Surface(
+                        color = EmeraldGreen.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = statusMessage!!,
+                            color = EmeraldGreen,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                if (errorMessage != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                // JSON Text Field (Monospace, scrollable, editable)
+                OutlinedTextField(
+                    value = jsonText,
+                    onValueChange = {
+                        jsonText = it
+                        errorMessage = null
+                        statusMessage = null
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .testTag("json_config_editor"),
+                    textStyle = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    placeholder = { Text("JSON verisini buraya yapıştırın veya düzenleyin...") }
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onSaveConfig(
-                        config.copy(currencySymbol = FormatUtils.sanitizeCurrency(currencySymbol))
-                    )
-                }
+                    val result = JsonBackupUtils.parseBackupJson(jsonText)
+                    if (result.isSuccess) {
+                        val backupData = result.getOrNull()!!
+                        onRestoreData(backupData.records, backupData.units, backupData.config)
+                        onDismiss()
+                    } else {
+                        errorMessage = result.exceptionOrNull()?.message ?: "Geçersiz JSON verisi."
+                    }
+                },
+                modifier = Modifier.testTag("btn_restore_json")
             ) {
-                Text("Kaydet")
+                Text("Geri Yükle & Kaydet")
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("Vazgeç")
+                Text("Kapat")
             }
         }
     )
 }
+

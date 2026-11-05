@@ -40,4 +40,7 @@ interface UnitDao {
 
     @Query("UPDATE units SET currentPrice = :price, lastUpdated = :timestamp WHERE UPPER(name) = UPPER(:name)")
     suspend fun updatePriceByName(name: String, price: Double, timestamp: Long)
+
+    @Query("DELETE FROM units")
+    suspend fun deleteAllUnits()
 }
