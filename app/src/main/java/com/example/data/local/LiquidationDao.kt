@@ -46,4 +46,10 @@ interface LiquidationDao {
 
     @Query("DELETE FROM liquidation_records")
     suspend fun deleteAllRecords()
+
+    @Query("DELETE FROM liquidation_records WHERE notes IN (:notes)")
+    suspend fun deleteRecordsByNotes(notes: List<String>)
+
+    @Query("SELECT * FROM liquidation_records")
+    suspend fun getAllRecordsSync(): List<LiquidationRecord>
 }

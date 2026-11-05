@@ -58,6 +58,7 @@ fun CreateLiquidationSheet(
     defaultTargetPercentage: Double = 1.0,
     defaultAmount: Double = 1.0,
     onDismiss: () -> Unit,
+    onOpenUnitsDialog: () -> Unit = {},
     onSubmit: (
         assetSymbol: String,
         buyPrice: Double,
@@ -142,6 +143,40 @@ fun CreateLiquidationSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            if (units.isEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Kayıtlı Birim Bulunmuyor",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Likidasyon kaydı oluşturabilmek için önce birim tanımlamalısınız.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onOpenUnitsDialog()
+                            }
+                        ) {
+                            Text("Birim Ekle")
+                        }
+                    }
+                }
+            }
+
             var unitDropdownExpanded by remember { mutableStateOf(false) }
 
             // 1. Varlık / Sembol (Spinner)
@@ -157,13 +192,18 @@ fun CreateLiquidationSheet(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Varlık / Sembol") },
-                    placeholder = { Text("Varlık / Sembol Seçin") },
+                    placeholder = { Text(if (units.isEmpty()) "Önce birim ekleyin" else "Varlık / Sembol Seçin") },
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropdownExpanded)
                     },
                     isError = symbolError,
                     supportingText = if (symbolError) {
-                        { Text("Lütfen bir varlık/sembol seçin") }
+                        {
+                            Text(
+                                if (units.isEmpty()) "Kayıtlı birim yok. Lütfen önce birim ekleyin."
+                                else "Lütfen bir varlık/sembol seçin"
+                            )
+                        }
                     } else null,
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
@@ -181,8 +221,12 @@ fun CreateLiquidationSheet(
                 ) {
                     if (units.isEmpty()) {
                         DropdownMenuItem(
-                            text = { Text("Kayıtlı birim bulunamadı") },
-                            onClick = { unitDropdownExpanded = false }
+                            text = { Text("+ Birim Ekle (Kayıtlı birim yok)") },
+                            onClick = {
+                                unitDropdownExpanded = false
+                                onDismiss()
+                                onOpenUnitsDialog()
+                            }
                         )
                     } else {
                         units.forEach { u ->

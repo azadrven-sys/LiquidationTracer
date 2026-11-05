@@ -43,4 +43,7 @@ interface UnitDao {
 
     @Query("DELETE FROM units")
     suspend fun deleteAllUnits()
+
+    @Query("DELETE FROM units WHERE isSystem = 1")
+    suspend fun deleteSystemUnits()
 }

@@ -130,29 +130,8 @@ class LiquidationRepository(
 
     suspend fun ensureDefaultDataSeeded() {
         try {
-            val unitCount = unitDao.getCount()
-            if (unitCount == 0) {
-                val defaultUnits = listOf(
-                    UnitItem(name = "BTC", symbol = "BTC/USDT", currentPrice = 68450.0, isDefault = true, isSystem = true),
-                    UnitItem(name = "ETH", symbol = "ETH/USDT", currentPrice = 3520.0, isDefault = false, isSystem = true),
-                    UnitItem(name = "SOL", symbol = "SOL/USDT", currentPrice = 158.0, isDefault = false, isSystem = true),
-                    UnitItem(name = "AVAX", symbol = "AVAX/USDT", currentPrice = 29.2, isDefault = false, isSystem = true),
-                    UnitItem(name = "XRP", symbol = "XRP/USDT", currentPrice = 0.58, isDefault = false, isSystem = true),
-                    UnitItem(name = "DOGE", symbol = "DOGE/USDT", currentPrice = 0.145, isDefault = false, isSystem = true),
-                    UnitItem(name = "PAXG", symbol = "PAXG/USDT (Altın)", currentPrice = 2680.0, isDefault = false, isSystem = true),
-                    UnitItem(name = "USD", symbol = "USD", currentPrice = 1.0, isDefault = false, isSystem = true),
-                    UnitItem(name = "TRY", symbol = "₺", currentPrice = 0.029, isDefault = false, isSystem = true)
-                )
-                unitDao.insertAll(defaultUnits)
-            } else {
-                // Sanitize any existing units that had '$'
-                val existingUnits = unitDao.getAllUnitsSync()
-                existingUnits.forEach { u ->
-                    if (u.symbol.contains("$")) {
-                        unitDao.updateUnit(u.copy(symbol = u.symbol.replace("$", "").ifBlank { "USD" }))
-                    }
-                }
-            }
+            // Örnek sistem birimlerini sil (yeni kurulumlarda test birimleri eklenmez)
+            unitDao.deleteSystemUnits()
 
             val existingConfig = configDao.getConfigSync()
             if (existingConfig == null) {
@@ -160,7 +139,7 @@ class LiquidationRepository(
                     AppConfig(
                         id = 1,
                         defaultTargetPercentage = 1.0,
-                        defaultUnit = "BTC",
+                        defaultUnit = "",
                         defaultAmount = 1.0,
                         currencySymbol = ""
                     )
@@ -171,62 +150,15 @@ class LiquidationRepository(
                 )
             }
 
-            val recordCount = liquidationDao.getCount()
-            if (recordCount == 0) {
-                val now = System.currentTimeMillis()
-                val sampleRecords = listOf(
-                    LiquidationRecord(
-                        assetSymbol = "BTC",
-                        buyPrice = 64500.0,
-                        amount = 0.5,
-                        targetPercentage = 1.0,
-                        unit = "USDT",
-                        notes = "Direnç kırılımı sonrası",
-                        createdAt = now - 3600000 * 24 * 3
-                    ),
-                    LiquidationRecord(
-                        assetSymbol = "ETH",
-                        buyPrice = 3450.0,
-                        amount = 4.0,
-                        targetPercentage = 2.0,
-                        unit = "USDT",
-                        notes = "Orta vadeli takip",
-                        createdAt = now - 3600000 * 18
-                    ),
-                    LiquidationRecord(
-                        assetSymbol = "SOL",
-                        buyPrice = 145.0,
-                        amount = 25.0,
-                        targetPercentage = 3.0,
-                        unit = "USDT",
-                        notes = "Destek seviyesinden alım",
-                        createdAt = now - 3600000 * 12
-                    ),
-                    LiquidationRecord(
-                        assetSymbol = "AVAX",
-                        buyPrice = 28.5,
-                        amount = 150.0,
-                        targetPercentage = 1.5,
-                        unit = "USDT",
-                        notes = "Haftalık birikim",
-                        createdAt = now - 3600000 * 8
-                    ),
-                    LiquidationRecord(
-                        assetSymbol = "XRP",
-                        buyPrice = 0.55,
-                        amount = 5000.0,
-                        targetPercentage = 12.0,
-                        unit = "USDT",
-                        notes = "Hedef fiyata ulaşıldı ve satıldı",
-                        createdAt = now - 3600000 * 24 * 7,
-                        isSold = true,
-                        salePrice = 0.62,
-                        salePnl = 350.0,
-                        saleDate = now - 3600000 * 5
-                    )
-                )
-                liquidationDao.insertAll(sampleRecords)
-            }
+            // Önceden eklenmiş örnek test verilerini sil (yeni kurulumlarda test verisi eklenmez)
+            val sampleNotes = listOf(
+                "Direnç kırılımı sonrası",
+                "Orta vadeli takip",
+                "Destek seviyesinden alım",
+                "Haftalık birikim",
+                "Hedef fiyata ulaşıldı ve satıldı"
+            )
+            liquidationDao.deleteRecordsByNotes(sampleNotes)
         } catch (e: Exception) {
             e.printStackTrace()
         }

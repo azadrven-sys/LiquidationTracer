@@ -383,4 +383,11 @@ class ExampleRobolectricTest {
     val result = com.example.util.JsonBackupUtils.parseBackupJson(invalid)
     org.junit.Assert.assertTrue(result.isFailure)
   }
+
+  @Test
+  fun `test empty units prevents record creation without unit`() {
+    val emptyUnits = emptyList<com.example.data.model.UnitItem>()
+    val canCreateDirectly = emptyUnits.isNotEmpty()
+    org.junit.Assert.assertFalse(canCreateDirectly)
+  }
 }

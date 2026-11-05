@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Search
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material.icons.outlined.WaterDrop
 import com.example.util.MarketUtils
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,6 +49,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -64,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.ConfigurationDialog
@@ -100,6 +105,7 @@ fun HomeScreen(
     val activeDetailsRecord by viewModel.activeDetailsRecord.collectAsState()
 
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var showNoUnitsDialog by remember { mutableStateOf(false) }
 
     // Intercept system back button when in search mode to close search instead of closing the app
     BackHandler(enabled = isSearchExpanded || searchQuery.isNotEmpty()) {
@@ -190,9 +196,15 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            // FAB: On click, opens new liquidation record creation screen
+            // FAB: On click, opens new liquidation record creation screen (guarded against empty units)
             ExtendedFloatingActionButton(
-                onClick = { viewModel.openCreateSheet() },
+                onClick = {
+                    if (units.isEmpty()) {
+                        showNoUnitsDialog = true
+                    } else {
+                        viewModel.openCreateSheet()
+                    }
+                },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("Yeni Kayıt", fontWeight = FontWeight.Bold) },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -407,17 +419,35 @@ fun HomeScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = if (searchQuery.isNotBlank()) "Arama kriterine uygun kayıt bulunamadı" else "Henüz likidasyon kaydı yok",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (searchQuery.isNotBlank()) "Farklı bir arama terimi deneyin." else "Aşağıdaki + butonuna basarak yeni bir kayıt ekleyebilirsiniz.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (units.isEmpty()) {
+                            Text(
+                                text = "Henüz tanımlı birim/varlık yok",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Yeni likidasyon kaydı oluşturabilmek için önce birim tanımlamalısınız.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        } else {
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "Arama kriterine uygun kayıt bulunamadı" else "Henüz likidasyon kaydı yok",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "Farklı bir arama terimi deneyin." else "Aşağıdaki + butonuna basarak yeni bir kayıt ekleyebilirsiniz.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             } else {
@@ -461,8 +491,51 @@ fun HomeScreen(
             defaultTargetPercentage = config.defaultTargetPercentage,
             defaultAmount = config.defaultAmount,
             onDismiss = { viewModel.closeCreateSheet() },
+            onOpenUnitsDialog = { viewModel.openContextMenu(ContextMenuOption.UNITS) },
             onSubmit = { assetSymbol, buyPrice, amount, targetPercentage, notes ->
                 viewModel.createRecord(assetSymbol, buyPrice, amount, targetPercentage, notes)
+            }
+        )
+    }
+
+    // Dialog shown when FAB is clicked but no units exist
+    if (showNoUnitsDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoUnitsDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.ViewModule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = "Kayıtlı Birim Bulunamadı",
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("dialog_title_no_units")
+                )
+            },
+            text = {
+                Text(
+                    text = "Yeni bir likidasyon kaydı oluşturabilmek için önce en az bir birim (varlık) tanımlamalısınız."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNoUnitsDialog = false
+                        viewModel.openContextMenu(ContextMenuOption.UNITS)
+                    },
+                    modifier = Modifier.testTag("btn_add_unit_prompt")
+                ) {
+                    Text("Birim Ekle")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showNoUnitsDialog = false }) {
+                    Text("Vazgeç")
+                }
             }
         )
     }
