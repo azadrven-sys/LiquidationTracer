@@ -105,7 +105,7 @@ fun HomeScreen(
     val activeDetailsRecord by viewModel.activeDetailsRecord.collectAsState()
 
     var isSearchExpanded by remember { mutableStateOf(false) }
-    var showNoUnitsDialog by remember { mutableStateOf(false) }
+    var unitRequirementMessage by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     // Intercept system back button when in search mode to close search instead of closing the app
     BackHandler(enabled = isSearchExpanded || searchQuery.isNotEmpty()) {
@@ -196,11 +196,14 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            // FAB: On click, opens new liquidation record creation screen (guarded against empty units)
+            // FAB: On click, opens new liquidation record creation screen
+            // Blocked if there are no registered units or no default unit is selected
             ExtendedFloatingActionButton(
                 onClick = {
                     if (units.isEmpty()) {
-                        showNoUnitsDialog = true
+                        unitRequirementMessage = "Kayıtlı Birim Bulunamadı" to "Yeni bir likidasyon kaydı ekleyebilmek için önce en az bir birim tanımlamalısınız."
+                    } else if (units.none { it.isDefault }) {
+                        unitRequirementMessage = "Varsayılan Birim Seçilmedi" to "Yeni bir likidasyon kaydı ekleyebilmek için önce Birimler menüsünden bir varsayılan birim seçmelisiniz."
                     } else {
                         viewModel.openCreateSheet()
                     }
@@ -291,7 +294,15 @@ fun HomeScreen(
 
                 item {
                     Surface(
-                        onClick = { viewModel.openContextMenu(ContextMenuOption.DEFAULTS) },
+                        onClick = {
+                            if (units.isEmpty()) {
+                                unitRequirementMessage = "Kayıtlı Birim Bulunamadı" to "Varsayılanlar penceresine erişebilmek için önce en az bir birim tanımlamalısınız."
+                            } else if (units.none { it.isDefault }) {
+                                unitRequirementMessage = "Varsayılan Birim Seçilmedi" to "Varsayılanlar penceresine erişebilmek için Birimler menüsünden bir varsayılan birim seçmelisiniz."
+                            } else {
+                                viewModel.openContextMenu(ContextMenuOption.DEFAULTS)
+                            }
+                        },
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.testTag("quick_btn_varsayilanlar")
@@ -433,6 +444,20 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
+                        } else if (units.none { it.isDefault }) {
+                            Text(
+                                text = "Varsayılan birim seçilmedi",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Yeni likidasyon kaydı ekleyebilmek için önce Birimler menüsünden bir varsayılan birim seçmelisiniz.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
                         } else {
                             Text(
                                 text = if (searchQuery.isNotBlank()) "Arama kriterine uygun kayıt bulunamadı" else "Henüz likidasyon kaydı yok",
@@ -498,10 +523,10 @@ fun HomeScreen(
         )
     }
 
-    // Dialog shown when FAB is clicked but no units exist
-    if (showNoUnitsDialog) {
+    // Dialog shown when units are missing or default unit is not selected
+    unitRequirementMessage?.let { (title, message) ->
         AlertDialog(
-            onDismissRequest = { showNoUnitsDialog = false },
+            onDismissRequest = { unitRequirementMessage = null },
             icon = {
                 Icon(
                     imageVector = Icons.Default.ViewModule,
@@ -511,29 +536,27 @@ fun HomeScreen(
             },
             title = {
                 Text(
-                    text = "Kayıtlı Birim Bulunamadı",
+                    text = title,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.testTag("dialog_title_no_units")
+                    modifier = Modifier.testTag("dialog_title_unit_requirement")
                 )
             },
             text = {
-                Text(
-                    text = "Yeni bir likidasyon kaydı oluşturabilmek için önce en az bir birim (varlık) tanımlamalısınız."
-                )
+                Text(text = message)
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        showNoUnitsDialog = false
+                        unitRequirementMessage = null
                         viewModel.openContextMenu(ContextMenuOption.UNITS)
                     },
-                    modifier = Modifier.testTag("btn_add_unit_prompt")
+                    modifier = Modifier.testTag("btn_go_to_units")
                 ) {
-                    Text("Birim Ekle")
+                    Text("Birimler'e Git")
                 }
             },
             dismissButton = {
-                OutlinedButton(onClick = { showNoUnitsDialog = false }) {
+                OutlinedButton(onClick = { unitRequirementMessage = null }) {
                     Text("Vazgeç")
                 }
             }
@@ -617,15 +640,24 @@ fun HomeScreen(
             )
         }
         ContextMenuOption.DEFAULTS -> {
-            DefaultsDialog(
-                config = config,
-                units = units,
-                onDismiss = { viewModel.closeContextMenu() },
-                onSaveDefaults = { updatedConfig ->
-                    viewModel.updateConfig(updatedConfig)
-                    viewModel.closeContextMenu()
+            if (units.isNotEmpty() && units.any { it.isDefault }) {
+                DefaultsDialog(
+                    config = config,
+                    units = units,
+                    onDismiss = { viewModel.closeContextMenu() },
+                    onSaveDefaults = { updatedConfig ->
+                        viewModel.updateConfig(updatedConfig)
+                        viewModel.closeContextMenu()
+                    }
+                )
+            } else {
+                viewModel.closeContextMenu()
+                if (units.isEmpty()) {
+                    unitRequirementMessage = "Kayıtlı Birim Bulunamadı" to "Varsayılanlar penceresine erişebilmek için önce en az bir birim tanımlamalısınız."
+                } else {
+                    unitRequirementMessage = "Varsayılan Birim Seçilmedi" to "Varsayılanlar penceresine erişebilmek için Birimler menüsünden bir varsayılan birim seçmelisiniz."
                 }
-            )
+            }
         }
         ContextMenuOption.CONFIG -> {
             ConfigurationDialog(

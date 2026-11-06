@@ -387,7 +387,34 @@ class ExampleRobolectricTest {
   @Test
   fun `test empty units prevents record creation without unit`() {
     val emptyUnits = emptyList<com.example.data.model.UnitItem>()
-    val canCreateDirectly = emptyUnits.isNotEmpty()
+    val canCreateDirectly = emptyUnits.isNotEmpty() && emptyUnits.any { it.isDefault }
     org.junit.Assert.assertFalse(canCreateDirectly)
+  }
+
+  @Test
+  fun `test units with no default selected blocks record creation and defaults access`() {
+    val unitsWithoutDefault = listOf(
+        com.example.data.model.UnitItem(id = 1, name = "BTC", symbol = "BTC/USDT", currentPrice = 65000.0, isDefault = false),
+        com.example.data.model.UnitItem(id = 2, name = "ETH", symbol = "ETH/USDT", currentPrice = 3500.0, isDefault = false)
+    )
+
+    fun canAccessDefaults(units: List<com.example.data.model.UnitItem>): Boolean {
+        return units.isNotEmpty() && units.any { it.isDefault }
+    }
+
+    fun canCreateRecord(units: List<com.example.data.model.UnitItem>): Boolean {
+        return units.isNotEmpty() && units.any { it.isDefault }
+    }
+
+    // Both should be FALSE when no default unit is selected
+    org.junit.Assert.assertFalse(canAccessDefaults(unitsWithoutDefault))
+    org.junit.Assert.assertFalse(canCreateRecord(unitsWithoutDefault))
+
+    // When one is marked default, both should be TRUE
+    val unitsWithDefault = unitsWithoutDefault.mapIndexed { idx, it ->
+        if (idx == 0) it.copy(isDefault = true) else it
+    }
+    org.junit.Assert.assertTrue(canAccessDefaults(unitsWithDefault))
+    org.junit.Assert.assertTrue(canCreateRecord(unitsWithDefault))
   }
 }

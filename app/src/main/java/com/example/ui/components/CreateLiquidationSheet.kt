@@ -69,7 +69,7 @@ fun CreateLiquidationSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val defaultUnitItem = remember(units) { units.find { it.isDefault } ?: units.firstOrNull() }
+    val defaultUnitItem = remember(units) { units.find { it.isDefault } }
 
     var assetSymbol by remember { mutableStateOf(defaultUnitItem?.name ?: "") }
     var buyPriceText by remember {
@@ -175,6 +175,38 @@ fun CreateLiquidationSheet(
                         }
                     }
                 }
+            } else if (units.none { it.isDefault }) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Varsayılan Birim Seçilmedi",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Yeni likidasyon kaydı ekleyebilmek için önce Birimler menüsünden bir varsayılan birim seçmelisiniz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onOpenUnitsDialog()
+                            }
+                        ) {
+                            Text("Birimler'e Git")
+                        }
+                    }
+                }
             }
 
             var unitDropdownExpanded by remember { mutableStateOf(false) }
@@ -192,7 +224,13 @@ fun CreateLiquidationSheet(
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Varlık / Sembol") },
-                    placeholder = { Text(if (units.isEmpty()) "Önce birim ekleyin" else "Varlık / Sembol Seçin") },
+                    placeholder = {
+                        Text(
+                            if (units.isEmpty()) "Önce birim ekleyin"
+                            else if (units.none { it.isDefault }) "Varsayılan birim seçin"
+                            else "Varlık / Sembol Seçin"
+                        )
+                    },
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitDropdownExpanded)
                     },
@@ -201,6 +239,7 @@ fun CreateLiquidationSheet(
                         {
                             Text(
                                 if (units.isEmpty()) "Kayıtlı birim yok. Lütfen önce birim ekleyin."
+                                else if (units.none { it.isDefault }) "Varsayılan birim seçilmedi. Lütfen birim seçin."
                                 else "Lütfen bir varlık/sembol seçin"
                             )
                         }
@@ -479,6 +518,10 @@ fun CreateLiquidationSheet(
 
                 Button(
                     onClick = {
+                        if (units.isEmpty() || units.none { it.isDefault }) {
+                            symbolError = true
+                            return@Button
+                        }
                         val sym = assetSymbol.trim()
                         val buyPrice = buyPriceText.replace(',', '.').toDoubleOrNull()
                         val amt = amountText.replace(',', '.').toDoubleOrNull()
