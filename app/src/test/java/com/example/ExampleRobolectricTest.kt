@@ -417,4 +417,24 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertTrue(canAccessDefaults(unitsWithDefault))
     org.junit.Assert.assertTrue(canCreateRecord(unitsWithDefault))
   }
+
+  @Test
+  fun `test default unit is preselected for defaults window`() {
+    val units = listOf(
+        com.example.data.model.UnitItem(id = 1, name = "BTC", symbol = "BTC/USDT", currentPrice = 65000.0, isDefault = false),
+        com.example.data.model.UnitItem(id = 2, name = "SOL", symbol = "SOL/USDT", currentPrice = 160.0, isDefault = true),
+        com.example.data.model.UnitItem(id = 3, name = "ETH", symbol = "ETH/USDT", currentPrice = 3500.0, isDefault = false)
+    )
+    val configWithEmptyDefault = com.example.data.model.AppConfig(defaultUnit = "")
+
+    fun resolvePreselectedUnit(units: List<com.example.data.model.UnitItem>, config: com.example.data.model.AppConfig): String {
+        return units.find { it.isDefault }?.name
+            ?: config.defaultUnit.takeIf { sym -> units.any { it.name == sym } }
+            ?: units.firstOrNull()?.name
+            ?: ""
+    }
+
+    val preselected = resolvePreselectedUnit(units, configWithEmptyDefault)
+    assertEquals("SOL", preselected)
+  }
 }

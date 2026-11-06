@@ -191,7 +191,9 @@ class LiquidationViewModel(
         notes: String
     ) {
         viewModelScope.launch {
-            val defaultUnit = appConfig.value.defaultUnit
+            val defaultUnit = appConfig.value.defaultUnit.ifBlank {
+                allUnits.value.find { it.isDefault }?.name ?: "USDT"
+            }
             repository.insertRecord(
                 LiquidationRecord(
                     assetSymbol = assetSymbol.trim().uppercase(),

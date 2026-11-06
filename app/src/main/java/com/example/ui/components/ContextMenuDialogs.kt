@@ -58,6 +58,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -509,10 +510,23 @@ fun DefaultsDialog(
     onDismiss: () -> Unit,
     onSaveDefaults: (AppConfig) -> Unit
 ) {
-    var selectedUnit by remember { mutableStateOf(config.defaultUnit) }
+    // Açılışta öncelikle varsayılan birim (isDefault == true) seçilsin
+    val defaultUnitName = remember(units, config) {
+        units.find { it.isDefault }?.name
+            ?: config.defaultUnit.takeIf { sym -> units.any { it.name == sym } }
+            ?: units.firstOrNull()?.name
+            ?: ""
+    }
+    var selectedUnit by remember(defaultUnitName) { mutableStateOf(defaultUnitName) }
     var unitExpanded by remember { mutableStateOf(false) }
     var targetPctText by remember { mutableStateOf(FormatUtils.formatPercent(config.defaultTargetPercentage)) }
     var defaultAmountText by remember { mutableStateOf(FormatUtils.formatAmount(config.defaultAmount)) }
+
+    LaunchedEffect(defaultUnitName) {
+        if (selectedUnit.isBlank() || units.none { it.name == selectedUnit }) {
+            selectedUnit = defaultUnitName
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -559,10 +573,12 @@ fun DefaultsDialog(
                             value = selectedUnit,
                             onValueChange = {},
                             readOnly = true,
+                            placeholder = { Text("Varsayılan birim seçin") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded) },
                             modifier = Modifier
                                 .menuAnchor()
                                 .fillMaxWidth()
+                                .testTag("select_default_unit")
                         )
                         ExposedDropdownMenu(
                             expanded = unitExpanded,
@@ -570,7 +586,23 @@ fun DefaultsDialog(
                         ) {
                             units.forEach { unitItem ->
                                 DropdownMenuItem(
-                                    text = { Text(unitItem.name) },
+                                    text = {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(unitItem.name)
+                                            if (unitItem.isDefault) {
+                                                Text(
+                                                    text = "Varsayılan",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = EmeraldGreen,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    },
                                     onClick = {
                                         selectedUnit = unitItem.name
                                         unitExpanded = false
@@ -627,9 +659,10 @@ fun DefaultsDialog(
                 onClick = {
                     val targetPct = targetPctText.replace(',', '.').toDoubleOrNull() ?: 1.0
                     val defaultAmt = defaultAmountText.replace(',', '.').toDoubleOrNull() ?: 1.0
+                    val finalSelectedUnit = selectedUnit.ifBlank { defaultUnitName }
                     onSaveDefaults(
                         config.copy(
-                            defaultUnit = selectedUnit,
+                            defaultUnit = finalSelectedUnit,
                             defaultTargetPercentage = targetPct,
                             defaultAmount = defaultAmt
                         )

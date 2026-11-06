@@ -65,6 +65,13 @@ class LiquidationRepository(
 
     suspend fun setDefaultUnit(id: Long) {
         unitDao.setDefaultUnit(id)
+        val unit = unitDao.getAllUnitsSync().find { it.id == id }
+        if (unit != null) {
+            val cfg = configDao.getConfigSync()
+            if (cfg != null) {
+                configDao.updateConfig(cfg.copy(defaultUnit = unit.name))
+            }
+        }
     }
 
     suspend fun updateUnitManualPrice(id: Long, price: Double) {

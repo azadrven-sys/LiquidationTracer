@@ -647,6 +647,11 @@ fun HomeScreen(
                     onDismiss = { viewModel.closeContextMenu() },
                     onSaveDefaults = { updatedConfig ->
                         viewModel.updateConfig(updatedConfig)
+                        units.find { it.name == updatedConfig.defaultUnit }?.let { u ->
+                            if (!u.isDefault) {
+                                viewModel.setDefaultUnit(u.id)
+                            }
+                        }
                         viewModel.closeContextMenu()
                     }
                 )
